@@ -1,0 +1,27 @@
+body {
+    background-color: #f8f9fa;
+  }
+  
+  .book-cover {
+    width: 50px;
+    height: 70px;
+    object-fit: cover;
+    border-radius: 3px;
+  }
+  
+  #image-preview img {
+    max-width: 100%;
+    max-height: 150px;
+    margin-top: 10px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+  }
+  
+  .table th, .table td {
+    vertical-align: middle;
+  }
+  
+  .action-buttons .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+  }

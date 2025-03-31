@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Book Management System - Yugam Chheda</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .book-cover { 
+      width: 80px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+    #loading-spinner {
+      display: none;
+    }
+    .error-message {
+      color: #dc3545;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <header class="text-center mb-5">
+      <h1 class="display-4">Book Management System</h1>
+      <p class="lead">Midterm Project 2025 - Yugam Chheda</p>
+    </header>
+
+    <div class="row">
+      <div class="col-md-4 mb-4">
+        <div class="card">
+          <div class="card-header bg-primary text-white">
+            <h2 class="h5 mb-0">Manage Books</h2>
+          </div>
+          <div class="card-body">
+            <form id="book-form">
+              <input type="hidden" id="book-id">
+              <div class="mb-3">
+                <label for="title" class="form-label">Title*</label>
+                <input type="text" class="form-control" id="title" required>
+              </div>
+              <div class="mb-3">
+                <label for="price" class="form-label">Price*</label>
+                <input type="number" step="0.01" class="form-control" id="price" required>
+              </div>
+              <div class="mb-3">
+                <label for="genre" class="form-label">Genre*</label>
+                <input type="text" class="form-control" id="genre" required>
+              </div>
+              <div class="mb-3">
+                <label for="image" class="form-label">Cover Image</label>
+                <input type="file" class="form-control" id="image" accept="image/*">
+                <div class="mt-2" id="image-preview"></div>
+              </div>
+              <button type="submit" class="btn btn-primary me-2" id="submit-btn">
+                <span id="submit-text">Add Book</span>
+                <span id="loading-spinner" class="spinner-border spinner-border-sm ms-2"></span>
+              </button>
+              <button type="button" class="btn btn-secondary" id="cancel-btn" style="display: none;">Cancel</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-8">
+        <div class="card">
+          <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <h2 class="h5 mb-0">Book Collection</h2>
+            <button class="btn btn-sm btn-light" onclick="loadBooks()">Refresh</button>
+          </div>
+          <div class="card-body">
+            <div class="d-flex justify-content-center">
+              <div id="loading-books" class="spinner-border text-primary"></div>
+            </div>
+            <div id="error-message" class="error-message text-center mb-3"></div>
+            <div class="table-responsive">
+              <table class="table table-hover" id="books-table" style="display: none;">
+                <thead>
+                  <tr>
+                    <th>Cover</th>
+                    <th>Title</th>
+                    <th>Genre</th>
+                    <th>Price</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="books-list"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://bookapp-775023150571.us-central1.run.app';
+    let isEditing = false;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadBooks();
+      setupEventListeners();
+    });
+
+    function setupEventListeners() {
+      document.getElementById('book-form').addEventListener('submit', handleFormSubmit);
+      document.getElementById('cancel-btn').addEventListener('click', resetForm);
+      document.getElementById('image').addEventListener('change', handleImageUpload);
+    }
+
+    async function loadBooks() {
+      const loadingElement = document.getElementById('loading-books');
+      const tableElement = document.getElementById('books-table');
+      const errorElement = document.getElementById('error-message');
+      
+      loadingElement.style.display = 'block';
+      tableElement.style.display = 'none';
+      errorElement.textContent = '';
+
+      try {
+        const response = await fetch(`${API_URL}/api/books`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const books = await response.json();
+        renderBooks(books);
+        tableElement.style.display = 'table';
+      } catch (error) {
+        console.error('Error loading books:', error);
+        errorElement.textContent = 'Error loading books. Please try again.';
+      } finally {
+        loadingElement.style.display = 'none';
+      }
+    }
+
+    function renderBooks(books) {
+      const booksList = document.getElementById('books-list');
+      booksList.innerHTML = '';
+
+      if (books.length === 0) {
+        booksList.innerHTML = `
+          <tr>
+            <td colspan="5" class="text-center text-muted">No books found. Add a book to get started.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      books.forEach(book => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>
+            ${book.imageUrl ? 
+              `<img src="${book.imageUrl}" class="book-cover" alt="${book.title}">` : 
+              '<div class="book-cover bg-light d-flex align-items-center justify-content-center">No Image</div>'}
+          </td>
+          <td>${book.title}</td>
+          <td>${book.genre}</td>
+          <td>$${book.price?.toFixed(2) || '0.00'}</td>
+          <td>
+            <button class="btn btn-sm btn-warning me-2" onclick="editBook('${book.id}')">Edit</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteBook('${book.id}')">Delete</button>
+          </td>
+        `;
+        booksList.appendChild(row);
+      });
+    }
+
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submit-btn');
+      const submitText = document.getElementById('submit-text');
+      const spinner = document.getElementById('loading-spinner');
+      
+      submitText.textContent = isEditing ? 'Updating...' : 'Adding...';
+      spinner.style.display = 'inline-block';
+      submitBtn.disabled = true;
+
+      try {
+        const title = document.getElementById('title').value;
+        const price = document.getElementById('price').value;
+        const genre = document.getElementById('genre').value;
+        const bookId = document.getElementById('book-id').value;
+        const imageFile = document.getElementById('image').files[0];
+
+        if (!title || !price || !genre) {
+          throw new Error('Please fill all required fields');
+        }
+
+        const bookData = { title, price: parseFloat(price), genre };
+
+        if (isEditing) {
+          // Update existing book
+          await updateBook(bookId, bookData);
+          if (imageFile) {
+            await uploadBookImage(bookId, imageFile);
+          }
+          alert('Book updated successfully!');
+        } else {
+          // Add new book
+          const newBook = await addBook(bookData);
+          if (imageFile) {
+            await uploadBookImage(newBook.id, imageFile);
+          }
+          alert('Book added successfully!');
+        }
+
+        resetForm();
+        loadBooks();
+      } catch (error) {
+        console.error('Error:', error);
+        alert(`Error: ${error.message}`);
+      } finally {
+        submitText.textContent = isEditing ? 'Update Book' : 'Add Book';
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+      }
+    }
+
+    async function addBook(bookData) {
+      const response = await fetch(`${API_URL}/api/books`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(bookData)
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to add book');
+      }
+      
+      return await response.json();
+    }
+
+    async function updateBook(bookId, bookData) {
+      const response = await fetch(`${API_URL}/api/books/${bookId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(bookData)
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update book');
+      }
+    }
+
+    async function uploadBookImage(bookId, imageFile) {
+      const reader = new FileReader();
+      return new Promise((resolve, reject) => {
+        reader.onload = async function(e) {
+          try {
+            const base64String = e.target.result.split(',')[1];
+            const response = await fetch(`${API_URL}/api/upload`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                imageBase64: base64String,
+                bookId: bookId
+              })
+            });
+            
+            if (!response.ok) throw new Error('Failed to upload image');
+            resolve(await response.json());
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.readAsDataURL(imageFile);
+      });
+    }
+
+    function handleImageUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('image-preview').innerHTML = `
+          <img src="${e.target.result}" class="img-thumbnail" style="max-height: 150px;">
+        `;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function editBook(bookId) {
+      try {
+        const response = await fetch(`${API_URL}/api/books`);
+        if (!response.ok) throw new Error('Failed to fetch books');
+        
+        const books = await response.json();
+        const bookToEdit = books.find(book => book.id === bookId);
+        
+        if (!bookToEdit) throw new Error('Book not found');
+
+        // Populate form
+        document.getElementById('title').value = bookToEdit.title;
+        document.getElementById('price').value = bookToEdit.price;
+        document.getElementById('genre').value = bookToEdit.genre;
+        document.getElementById('book-id').value = bookToEdit.id;
+        
+        // Show image preview if image there or exists
+        const imagePreview = document.getElementById('image-preview');
+        imagePreview.innerHTML = bookToEdit.imageUrl ? 
+          `<img src="${bookToEdit.imageUrl}" class="img-thumbnail" style="max-height: 150px;">` : 
+          '';
+
+        // Change to edit mode
+        isEditing = true;
+        document.getElementById('submit-btn').textContent = 'Update Book';
+        document.getElementById('cancel-btn').style.display = 'inline-block';
+        
+        // Scroll to form
+        document.querySelector('html').scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      } catch (error) {
+        console.error('Error editing book:', error);
+        alert('Error loading book details');
+      }
+    }
+
+    async function deleteBook(bookId) {
+      if (!confirm('Are you sure you want to delete this book?')) return;
+      
+      try {
+        const response = await fetch(`${API_URL}/api/books/${bookId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete book');
+        
+        loadBooks();
+      } catch (error) {
+        console.error('Error deleting book:', error);
+        alert('Failed to delete book');
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('book-form').reset();
+      document.getElementById('book-id').value = '';
+      document.getElementById('image-preview').innerHTML = '';
+      isEditing = false;
+      document.getElementById('submit-btn').textContent = 'Add Book';
+      document.getElementById('cancel-btn').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
